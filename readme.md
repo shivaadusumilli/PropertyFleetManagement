@@ -1,3 +1,14 @@
+# Prerequisites
+Install and setup Docker
+Install Java 17
+
+# Steps to run this
+mvn install
+
+
+
+
+## Other NOTES
 # Create network within Docker
 docker network create property-network
 
@@ -17,18 +28,4 @@ docker run --name mysql-container \
 
 
 # start mysql with docker-compose file
-docker-compose up -d
-
-
-
-
-
-
-# Steps to Run this Application
-
-# Build spring boot app
-./mvnw clean package
-# Build docker image based on DockerFile
-docker build -t spring-boot-app .
-# Start Docker setup
 docker-compose up -d
