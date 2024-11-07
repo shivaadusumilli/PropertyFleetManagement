@@ -17,7 +17,6 @@ CREATE TABLE property (
     zipcode VARCHAR(10),
     type VARCHAR(255),
     number_of_units INT,
-    owner_id INT,
     property_size DECIMAL(10, 2),
     construction_date DATE,
     FOREIGN KEY (owner_id) REFERENCES property_owner(owner_id)  -- Foreign key to property_owner
@@ -36,7 +35,7 @@ CREATE TABLE resident (
 
 -- Create unit table with composite primary key and foreign key to property
 CREATE TABLE unit (
-    unit_id INT,  -- Remove AUTO_INCREMENT since it’s not globally unique
+    unit_id INT,  
     property_id INT,
     unit_size VARCHAR(50),
     bedrooms INT,
@@ -46,8 +45,6 @@ CREATE TABLE unit (
     PRIMARY KEY (unit_id, property_id),  -- Composite primary key
     FOREIGN KEY (property_id) REFERENCES property(property_id)  -- Foreign key to property
 );
-
-
 
 -- Create lease_agreement table with foreign keys to resident, property, and unit
 CREATE TABLE lease_agreement (
@@ -65,7 +62,6 @@ CREATE TABLE lease_agreement (
     FOREIGN KEY (property_id) REFERENCES property(property_id),
     FOREIGN KEY (unit_id) REFERENCES unit(unit_id)
 );
-
 
 -- Create access_device table with foreign key to resident
 CREATE TABLE access_device (
@@ -92,8 +88,8 @@ CREATE TABLE maintenance_request (
     assigned_staff_id INT,
     resolution_date DATE,
     FOREIGN KEY (resident_id) REFERENCES resident(resident_id),
-    FOREIGN KEY (property_id) REFERENCES property(property_id),
-    FOREIGN KEY (unit_id) REFERENCES unit(unit_id)
+    FOREIGN KEY (property_id) REFERENCES property(property_id), -- not required
+    FOREIGN KEY (unit_id) REFERENCES unit(unit_id) -- not required
 );
 
 -- Create parking_spot table with foreign keys to property and resident
@@ -131,7 +127,7 @@ CREATE TABLE access_log (
     access_date_time DATETIME,
     access_location VARCHAR(255),
     access_method VARCHAR(50),
-    FOREIGN KEY (resident_id) REFERENCES resident(resident_id),
+    FOREIGN KEY (resident_id) REFERENCES resident(resident_id), -- this is optional
     FOREIGN KEY (access_device_id) REFERENCES access_device(access_device_id)
 );
 
@@ -169,7 +165,7 @@ CREATE TABLE visitor_log (
     entry_time TIME,
     exit_time TIME,
     FOREIGN KEY (resident_id) REFERENCES resident(resident_id),
-    FOREIGN KEY (unit_id) REFERENCES unit(unit_id)
+    FOREIGN KEY (unit_id) REFERENCES unit(unit_id) -- not required
 );
 
 -- Create vehicle table with foreign keys to resident and parking_spot
@@ -609,3 +605,75 @@ INSERT INTO vehicle (vehicle_license_number, resident_id, property_id, vehicle_m
 ('DEF234', 4, 2, 'Chevrolet', 'Malibu', '2023-03-01', 2),  -- Resident 4 at property 2, parking spot 2
 ('GHI567', 5, 3, 'Nissan', 'Altima', '2023-04-01', 1),    -- Resident 5 at property 3, parking spot 1
 ('JKL890', 6, 3, 'Hyundai', 'Elantra', '2023-05-01', 2);  -- Resident 6 at property 3, parking spot 2
+
+
+
+
+
+
+
+
+
+-- create activate_leases view
+CREATE VIEW active_leases AS
+SELECT r.first_name, r.last_name, l.lease_start_date, l.lease_end_date, p.property_name
+FROM lease_agreement l
+JOIN resident r ON l.resident_id = r.resident_id
+JOIN property p ON l.property_id = p.property_id
+WHERE l.status = 'Active';
+
+select * from active_leases;
+
+
+-- create property_revenue_report view
+CREATE VIEW property_revenue AS
+SELECT p.property_name, SUM(l.rent_amount) AS total_revenue
+FROM lease_agreement l
+JOIN property p ON l.property_id = p.property_id
+GROUP BY p.property_name;
+
+
+-- create property_occupancy_rate view
+CREATE VIEW property_occupancy_rate AS
+SELECT p.property_name, 
+       COUNT(u.unit_id) AS total_units,
+       SUM(CASE WHEN u.availability = 'Unavailable' THEN 1 ELSE 0 END) AS occupied_units,
+       (SUM(CASE WHEN u.availability = 'Unavailable' THEN 1 ELSE 0 END) / COUNT(u.unit_id)) * 100 AS occupancy_rate
+FROM unit u
+JOIN property p ON u.property_id = p.property_id
+GROUP BY p.property_name;
+
+
+-- create trigger to update unit status based on leasing agreemenet
+DELIMITER //
+CREATE TRIGGER update_unit_status
+AFTER INSERT ON lease_agreement
+FOR EACH ROW
+BEGIN
+    UPDATE unit
+    SET availability = 'Unavailable'
+    WHERE unit_id = NEW.unit_id AND property_id = NEW.property_id;
+END;
+//
+DELIMITER ;
+
+
+-- procedure to calculate total rent
+DELIMITER //
+CREATE PROCEDURE calculate_total_rent(IN property_id INT, IN start_date DATE, IN end_date DATE)
+BEGIN
+    SELECT SUM(rent_amount) AS total_rent
+    FROM lease_agreement
+    WHERE property_id = property_id
+    AND lease_start_date >= start_date
+    AND lease_end_date <= end_date;
+END;
+//
+DELIMITER ;
+
+CALL calculate_total_rent(1, '2024-01-01', '2024-12-31');
+
+
+-- create indexes
+CREATE INDEX idx_resident_id ON lease_agreement(resident_id);
+CREATE INDEX idx_property_id ON lease_agreement(property_id);
